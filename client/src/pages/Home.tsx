@@ -1,33 +1,96 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { trpc } from "@/lib/trpc";
+import { CARD_BY_ID, CARD_DEFINITIONS, DECK_SIZE } from "../../../shared/okocCards";
+import type { RoomSnapshot } from "../../../shared/gameTypes";
+import { Check, ChevronDown, Copy, Crown, Dice5, Gem, HandCoins, Info, Loader2, LockKeyhole, MessageSquareText, ScrollText, Send, Shield, Swords, UsersRound } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
-export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+type Credentials = { code: string; token: string };
+const STORAGE_KEY = "okoc-seat-v1";
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
-  );
+function persistSeat(value: Credentials | null) {
+  if (value) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  else localStorage.removeItem(STORAGE_KEY);
 }
+
+function Gold({ value }: { value: number }) { return <span className="gold"><Gem size={14} /> {value.toLocaleString()}</span>; }
+function CardMark({ name }: { name: string }) { return <div className="card-mark" aria-hidden="true"><Crown size={26} /><span>{name.slice(0, 1)}</span></div>; }
+
+export default function Home() {
+  const [seat, setSeat] = useState<Credentials | null>(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { return null; } });
+  const [name, setName] = useState(""); const [joinCode, setJoinCode] = useState("");
+  const [activeCard, setActiveCard] = useState<string | null>(null); const [cardTarget, setCardTarget] = useState(""); const [cardAmount, setCardAmount] = useState(100);
+  const [goldTarget, setGoldTarget] = useState(""); const [goldAmount, setGoldAmount] = useState(100); const [fromPlayer, setFromPlayer] = useState(""); const [toPlayer, setToPlayer] = useState(""); const [transferAmount, setTransferAmount] = useState(100);
+  const [chat, setChat] = useState(""); const [catalogOpen, setCatalogOpen] = useState(false); const [copied, setCopied] = useState(false);
+  const utils = trpc.useUtils();
+  const roomQuery = trpc.game.get.useQuery(seat ?? { code: "------", token: "unjoined-seat" }, { enabled: Boolean(seat), refetchInterval: 2500, retry: false });
+  const room = roomQuery.data;
+
+  useEffect(() => { if (room?.state.players.length) { const viewerId = room.viewer?.id; if (!goldTarget && viewerId) setGoldTarget(viewerId); if (!fromPlayer && viewerId) setFromPlayer(viewerId); const other = room.state.players.find(p => p.id !== viewerId); if (!toPlayer && other) setToPlayer(other.id); } }, [room, goldTarget, fromPlayer, toPlayer]);
+  useEffect(() => { if (roomQuery.error) { persistSeat(null); setSeat(null); toast.error("Dein Sitz ist nicht mehr verfügbar. Bitte dem Raum erneut beitreten."); } }, [roomQuery.error]);
+
+  const invalidate = () => utils.game.get.invalidate();
+  const create = trpc.game.create.useMutation({ onSuccess: data => { const next = { code: data.room.code, token: data.token }; persistSeat(next); setSeat(next); toast.success("Dein Hof ist bereit."); }, onError: err => toast.error(err.message) });
+  const join = trpc.game.join.useMutation({ onSuccess: data => { const next = { code: data.room.code, token: data.token }; persistSeat(next); setSeat(next); toast.success("Willkommen am Hof."); }, onError: err => toast.error(err.message) });
+  const start = trpc.game.start.useMutation({ onSuccess: invalidate, onError: err => toast.error(err.message) });
+  const play = trpc.game.play.useMutation({ onSuccess: () => { invalidate(); setActiveCard(null); }, onError: err => toast.error(err.message) });
+  const adjust = trpc.game.adjustGold.useMutation({ onSuccess: invalidate, onError: err => toast.error(err.message) });
+  const transfer = trpc.game.transfer.useMutation({ onSuccess: invalidate, onError: err => toast.error(err.message) });
+  const roll = trpc.game.roll.useMutation({ onSuccess: data => { invalidate(); toast.success(`Würfel: ${data.result}`); }, onError: err => toast.error(err.message) });
+  const nextTurn = trpc.game.nextTurn.useMutation({ onSuccess: invalidate, onError: err => toast.error(err.message) });
+  const sendChat = trpc.game.chat.useMutation({ onSuccess: () => { setChat(""); invalidate(); }, onError: err => toast.error(err.message) });
+
+  const current = useMemo(() => room?.state.players.find(player => player.id === room.state.currentPlayerId), [room]);
+  const king = useMemo(() => room?.state.players.find(player => player.id === room.state.kingPlayerId), [room]);
+  const me = useMemo(() => room?.state.players.find(player => player.id === room.viewer?.id), [room]);
+  const selected = activeCard && me?.hand ? me.hand.find(card => card.instanceId === activeCard) : undefined;
+  const selectedDef = selected ? CARD_BY_ID[selected.definitionId] : undefined;
+  const busy = create.isPending || join.isPending || start.isPending || play.isPending || adjust.isPending || transfer.isPending || roll.isPending || nextTurn.isPending || sendChat.isPending;
+
+  function submitCreate(e: FormEvent) { e.preventDefault(); create.mutate({ name }); }
+  function submitJoin(e: FormEvent) { e.preventDefault(); join.mutate({ code: joinCode.toUpperCase(), name, token: seat?.code === joinCode.toUpperCase() ? seat.token : undefined }); }
+  function copyCode() { if (!room) return; navigator.clipboard.writeText(room.code); setCopied(true); setTimeout(() => setCopied(false), 1300); }
+  function playSelected() { if (!seat || !selected) return; play.mutate({ ...seat, instanceId: selected.instanceId, targetPlayerId: cardTarget || undefined, amount: cardAmount }); }
+
+  if (!seat || !room) return <Landing name={name} setName={setName} joinCode={joinCode} setJoinCode={setJoinCode} onCreate={submitCreate} onJoin={submitJoin} loading={busy || roomQuery.isLoading} />;
+  if (room.state.status === "lobby") return <Lobby room={room} onStart={() => start.mutate(seat)} loading={busy} onLeave={() => { persistSeat(null); setSeat(null); }} />;
+
+  const sortedPlayers = [...room.state.players].sort((a, b) => a.seat - b.seat);
+  return <main className="app-shell">
+    <header className="court-header">
+      <a href="/" className="brand"><span className="brand-crown"><Crown size={20} /></span><span>ONE KING<br /><b>ONE CROWN</b></span></a>
+      <div className="court-meta"><span className="phase-pill">RUNDE {room.state.round} / 4</span><span className={cn("phase-pill", room.state.phase === "negotiation" && "phase-pill-gold")}>{room.state.phase === "playing" ? "SPIELPHASE" : "VERHANDLUNG"}</span><button className="room-code" onClick={copyCode}>RAUM {room.code} {copied ? <Check size={15} /> : <Copy size={15} />}</button></div>
+    </header>
+
+    <section className="game-hero"><div><p className="eyebrow">DER KÖNIGLICHE HOF</p><h1>{king ? <><Crown className="inline-crown" /> {king.name} trägt die Krone</> : "Der Hof wartet"}</h1><p>{room.state.phase === "playing" ? <><b>{current?.name ?? "—"}</b> ist am Zug · noch <b>{room.state.playsRemaining}</b> Karte(n) zu spielen</> : "Zwei Minuten verhandeln: Gold, Karten, Versprechen und Allianzen."}</p></div><div className="deck-stack"><div><span>KÖNIG</span><b>{room.state.kingDeck.length}</b></div><div><span>ADEL</span><b>{room.state.nobleDeck.length}</b></div><div><span>ABWURF</span><b>{room.state.discard.length}</b></div></div></section>
+
+    <section className="table-layout">
+      <aside className="players-panel panel"><div className="panel-heading"><UsersRound size={18} /><span>Am Tisch</span><em>{room.state.players.length}/8</em></div><div className="player-list">{sortedPlayers.map(noble => <div className={cn("noble-row", noble.id === room.viewer?.id && "noble-me", noble.id === room.state.currentPlayerId && "noble-active")} key={noble.id}><div className="seat">{noble.id === room.state.kingPlayerId ? <Crown size={17} /> : noble.seat}</div><div className="noble-name"><b>{noble.name}</b><span>{noble.id === room.viewer?.id ? "Du" : noble.id === room.state.kingPlayerId ? "König" : "Adliger"} · {noble.handCount} Karten</span></div><Gold value={noble.gold} /></div>)}</div>
+        <div className="turn-box"><p>Reihenfolge</p><strong>{room.state.phase === "playing" ? "Der König spielt zuerst (3); alle anderen spielen je 2." : "Verhandeln, handeln, dann nächste Runde."}</strong></div>
+      </aside>
+
+      <section className="play-area"><div className="turn-banner"><div><span>{room.state.phase === "playing" ? "AKTIVER ZUG" : "VERHANDLUNGSPHASE"}</span><strong>{room.state.phase === "playing" ? `${current?.name ?? "—"} · ${room.state.playsRemaining} Spielzüge` : "Der Hof verhandelt"}</strong></div>{room.state.phase === "playing" ? <Button onClick={() => roll.mutate({ ...seat, label: "würfelte am Hof" })} variant="outline" className="dice-button" disabled={busy}><Dice5 size={17} /> Würfeln</Button> : room.viewer?.isHost ? <Button onClick={() => nextTurn.mutate(seat)} disabled={busy} className="primary-button">{room.state.round === 4 ? "Spiel werten" : "Nächste Runde"} <ChevronDown size={17} /></Button> : <span className="host-note">Der Host eröffnet die nächste Runde.</span>}</div>
+        <div className="table-felt"><div className="felt-ornament ornament-a">✦</div><div className="felt-ornament ornament-b">✦</div><div className="felt-center"><Crown size={46} /><span>ONE KING</span><strong>ONE CROWN</strong><small>Nach 4 Runden: die meiste Goldmenge<br />und die Krone entscheiden.</small></div>{sortedPlayers.map((noble, index) => <div className={cn("table-seat", `table-seat-${index + 1}`, noble.id === room.state.kingPlayerId && "table-king")} key={noble.id}><span>{noble.id === room.state.kingPlayerId ? <Crown size={14} /> : "●"}</span><b>{noble.name}</b><Gold value={noble.gold} /></div>)}</div>
+        <section className="hand-section"><div className="hand-heading"><div><p className="eyebrow">DEINE HAND</p><h2>{me?.hand?.length ?? 0} / 8 Karten</h2></div>{room.state.phase === "playing" && current?.id === room.viewer?.id ? <span className="your-turn">Du bist dran</span> : <span className="waiting-turn">Privat · nur du siehst diese Karten</span>}</div><div className="hand-scroll">{me?.hand?.map(card => { const def = CARD_BY_ID[card.definitionId]; return <button type="button" key={card.instanceId} className="game-card" onClick={() => { setActiveCard(card.instanceId); setCardTarget(""); setCardAmount(100); }}><CardMark name={def?.name ?? "?"} /><span className="game-card-type">{card.definitionId.includes("betray") ? "Macht" : card.definitionId.includes("king") || card.definitionId === "mad-king" ? "Königshof" : "Intrige"}</span><b>{def?.name}</b><p>{def?.text}</p>{def?.timing && <em>{def.timing}</em>}</button>; })}</div></section>
+      </section>
+
+      <aside className="right-rail"><section className="panel gold-desk"><div className="panel-heading"><HandCoins size={18} /><span>Gold-Tresor</span></div><p>Dokumentiert Karten-Effekte und Deals für alle am Tisch.</p><Label htmlFor="gold-target">Empfänger / Betroffener</Label><select id="gold-target" value={goldTarget} onChange={e => setGoldTarget(e.target.value)}>{sortedPlayers.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><div className="gold-actions"><Input value={goldAmount} type="number" step="100" min="-3000" max="3000" onChange={e => setGoldAmount(Number(e.target.value))} /><Button variant="outline" disabled={busy} onClick={() => adjust.mutate({ ...seat, targetPlayerId: goldTarget, amount: Math.abs(goldAmount), reason: "Bankzahlung" })}>+ Bank</Button><Button variant="outline" disabled={busy} onClick={() => adjust.mutate({ ...seat, targetPlayerId: goldTarget, amount: -Math.abs(goldAmount), reason: "Bankzahlung" })}>− Bank</Button></div><div className="transfer"><Label>Handel / Zahlung</Label><div className="transfer-selects"><select value={fromPlayer} onChange={e => setFromPlayer(e.target.value)}>{sortedPlayers.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><span>→</span><select value={toPlayer} onChange={e => setToPlayer(e.target.value)}>{sortedPlayers.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></div><div className="transfer-submit"><Input value={transferAmount} type="number" step="100" min="100" onChange={e => setTransferAmount(Number(e.target.value))} /><Button disabled={busy} onClick={() => transfer.mutate({ ...seat, fromPlayerId: fromPlayer, toPlayerId: toPlayer, amount: transferAmount, reason: "Deal" })}>Buchen</Button></div></div></section>
+        <section className="panel chronicle"><div className="panel-heading"><ScrollText size={18} /><span>Hofchronik</span></div><div className="event-feed">{room.state.events.slice(0, 7).map(entry => <div className={cn("event", `event-${entry.tone ?? "system"}`)} key={entry.id}><span></span><p>{entry.message}</p></div>)}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); if (chat.trim()) sendChat.mutate({ ...seat, message: chat }); }}><Input value={chat} onChange={e => setChat(e.target.value)} maxLength={240} placeholder="Nachricht an den Hof …" /><Button size="icon" disabled={busy || !chat.trim()}><Send size={16} /></Button></form></section>
+      </aside>
+    </section>
+
+    <section className="rules-section"><button className="rules-trigger" onClick={() => setCatalogOpen(!catalogOpen)}><span><Info size={18} /> Regelhilfe & vollständiger Kartensatz</span><ChevronDown className={cn(catalogOpen && "rotate-180")} size={20} /></button>{catalogOpen && <div className="rules-content"><div className="rules-intro"><div><h3>Spielablauf</h3><p><b>1.</b> König spielt drei Karten, dann auf acht nachziehen. <b>2.</b> Jeder Adlige spielt zwei, dann auf acht nachziehen. <b>3.</b> Zwei Minuten frei verhandeln. Nach jeder Goldänderung übernimmt ein Adliger mit mehr Gold als der König sofort Krone, Sitz und Hand.</p></div><div><h3>Vollständiges Set</h3><p><b>{DECK_SIZE} Karten</b> aus der gelieferten Print-and-Play-Ausgabe: 81 Adels- und 18 Königskarten. Kartentexte, Timing-Hinweise, verdeckte Ritter und anhaltende Effekte sind im Spiel abrufbar.</p></div></div><div className="catalog-grid">{CARD_DEFINITIONS.map(def => <article key={def.id} className="catalog-card"><CardMark name={def.name} /><div><div className="catalog-title"><b>{def.name}</b><span>× {def.copies}</span></div><p>{def.text}</p>{def.timing && <em>{def.timing}</em>}</div></article>)}</div><div className="license-note"><Shield size={18} /><p><b>Attribution & Lizenz.</b> Dieses Online-Projekt ist eine nichtkommerzielle, freie Adaption der vom Nutzer bereitgestellten offiziellen <i>One King One Crown</i> Print-and-Play-Ausgabe. Kartenregeln und visuelle Ausgangswerke: Originaldesign. Veröffentlicht unter <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>; keine Bezahlschranke, kein Weiterverkauf.</p></div></div>}</section>
+
+    {selected && selectedDef && <div className="modal-backdrop" role="presentation" onMouseDown={() => setActiveCard(null)}><section className="card-modal" role="dialog" aria-modal="true" aria-label={`${selectedDef.name} spielen`} onMouseDown={e => e.stopPropagation()}><button className="close-modal" onClick={() => setActiveCard(null)}>×</button><div className="modal-card"><CardMark name={selectedDef.name} /><span>{selectedDef.copies} im Satz</span><h2>{selectedDef.name}</h2><p>{selectedDef.text}</p>{selectedDef.timing && <em><LockKeyhole size={14} /> {selectedDef.timing}</em>}</div><div className="modal-action"><p className="prompt-label">Hof-Assistent</p><h3>{selectedDef.prompt}</h3><Label htmlFor="card-target">Ziel (falls erforderlich)</Label><select id="card-target" value={cardTarget} onChange={e => setCardTarget(e.target.value)}><option value="">Kein Ziel automatisieren</option>{sortedPlayers.filter(p => p.id !== room.viewer?.id).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select>{["shadow-deal", "loyal-dog"].includes(selected.definitionId) && <div className="amount-row"><Label>Goldmenge</Label><div>{[100, 200, ...(selected.definitionId === "loyal-dog" ? [300] : [])].map(value => <button type="button" onClick={() => setCardAmount(value)} className={cn(cardAmount === value && "amount-active")} key={value}>{value}</button>)}</div></div>}<Button className="primary-button play-button" onClick={playSelected} disabled={busy || (room.state.phase === "playing" && current?.id !== room.viewer?.id && selected.definitionId !== "king-maker")}><Swords size={17} /> {selected.definitionId === "king-maker" && current?.id !== room.viewer?.id ? "Als Reaktion spielen" : selected.definitionId === "royal-bomb" && room.state.phase === "negotiation" ? "Royal Bomb zünden" : "Karte spielen"}</Button><p className="human-note"><MessageSquareText size={14} /> Soziale Entscheidungen, Zustimmung und Rollenrede werden transparent als Hinweis in der Hofchronik festgehalten.</p></div></section></div>}
+  </main>;
+}
+
+function Landing({ name, setName, joinCode, setJoinCode, onCreate, onJoin, loading }: { name: string; setName: (v: string) => void; joinCode: string; setJoinCode: (v: string) => void; onCreate: (e: FormEvent) => void; onJoin: (e: FormEvent) => void; loading: boolean }) {
+  return <main className="landing"><nav><div className="brand"><span className="brand-crown"><Crown size={20} /></span><span>ONE KING<br /><b>ONE CROWN</b></span></div><span className="nav-license">OFFIZIELLE PNP-ADAPTION · CC BY-NC-SA 4.0</span></nav><section className="landing-hero"><div className="hero-copy"><p className="eyebrow">MACHT HAT EINEN PREIS</p><h1>Ein Hof.<br /><i>Eine</i> Krone.</h1><p className="hero-lede">Ein Online-Spielbrett für Intrigen, Deals und Verrat. Spiele die vollständige Kartenausgabe mit 4–8 Leuten direkt im Browser.</p><div className="feature-row"><span><Crown /> 4 Runden</span><span><UsersRound /> 4–8 Personen</span><span><Gem /> 99 Karten</span></div></div><div className="hero-card-art"><div className="card-silhouette card-back"><span>ONE KING</span><b>ONE CROWN</b><Crown /></div><div className="card-silhouette card-front"><small>DER HOF</small><Crown size={60} /><strong>NUR EINE<br />KRONE</strong><i>Mehr Gold als der König?<br />Nimm sie dir.</i></div><div className="art-glow"></div></div></section><section className="entry-grid"><form className="entry-card create-card" onSubmit={onCreate}><div className="entry-icon"><Crown /></div><div><p className="eyebrow">NEUER HOF</p><h2>Spiel eröffnen</h2><p>Erstelle einen privaten Raum, teile den Code und leite die Runde.</p></div><Label htmlFor="host-name">Dein Name am Hof</Label><Input id="host-name" value={name} onChange={e => setName(e.target.value)} placeholder="z. B. Lady Morgan" maxLength={24} /><Button type="submit" className="primary-button" disabled={loading || name.trim().length < 2}>{loading ? <Loader2 className="animate-spin" /> : <Crown />} Hof eröffnen</Button></form><form className="entry-card join-card" onSubmit={onJoin}><div className="entry-icon"><UsersRound /></div><div><p className="eyebrow">EINLADUNG</p><h2>Hof betreten</h2><p>Gib deinen Namen und den sechsstelligen Raumcode der Gastgeberin ein.</p></div><Label htmlFor="join-name">Dein Name am Hof</Label><Input id="join-name" value={name} onChange={e => setName(e.target.value)} placeholder="z. B. Lord Ash" maxLength={24} /><Label htmlFor="room-code-input">Raumcode</Label><Input id="room-code-input" className="code-input" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))} placeholder="AB12CD" maxLength={6} /><Button type="submit" variant="outline" disabled={loading || name.trim().length < 2 || joinCode.length !== 6}>{loading ? <Loader2 className="animate-spin" /> : <Swords />} Hof betreten</Button></form></section><section className="how-strip"><div><span>01</span><p><b>Setze dich</b> — alle erhalten eine private Hand.</p></div><div><span>02</span><p><b>Spiele, verschwöre dich, zahle.</b> Der Tresor hält jede Goldänderung fest.</p></div><div><span>03</span><p><b>Überhole den König.</b> Mehr Gold erzwingt sofort Krone, Sitz- und Handtausch.</p></div></section><footer>Online-Adaption der bereitgestellten <i>One King One Crown</i> Print-and-Play-Ausgabe · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a> · Nur nichtkommerziell</footer></main>;
+}
+
+function Lobby({ room, onStart, loading, onLeave }: { room: RoomSnapshot; onStart: () => void; loading: boolean; onLeave: () => void }) { const count = room.state.players.length; return <main className="lobby"><header className="court-header"><a href="/" className="brand"><span className="brand-crown"><Crown size={20} /></span><span>ONE KING<br /><b>ONE CROWN</b></span></a><span className="phase-pill">WARTESAAL</span></header><section className="lobby-card"><p className="eyebrow">DEIN HOF IST BEREIT</p><h1>Versammle die Adligen.</h1><p className="lobby-lede">Teile diesen Raumcode mit deinen Mitspielenden. Sobald mindestens vier Personen am Tisch sitzen, kann der Host starten.</p><div className="lobby-code"><span>{room.code}</span><button onClick={() => navigator.clipboard.writeText(room.code)}><Copy size={18} /> Kopieren</button></div><div className="invite-tip">Einladung: Öffnet diese Website → <b>„Hof betreten“</b> → Code <b>{room.code}</b> eingeben.</div><div className="seats">{Array.from({ length: 8 }, (_, i) => { const noble = room.state.players[i]; return <div className={cn("seat-card", noble && "seat-filled")} key={i}>{noble ? <><div className="seat-medallion">{i + 1}</div><b>{noble.name}</b><span>{noble.id === room.viewer?.id ? "Du" : "Bereit"}</span></> : <><div className="seat-medallion">+</div><b>Freier Sitz</b><span>Einladung offen</span></>}</div>; })}</div>{room.viewer?.isHost ? <div className="lobby-actions"><Button className="primary-button" onClick={onStart} disabled={loading || count < 4}>{loading && <Loader2 className="animate-spin" />} {count < 4 ? `Noch ${4 - count} Person(en) nötig` : "Spiel beginnen"} <Crown size={17} /></Button><p>Beim Start erhält der König 1.000 Gold und acht Königskarten. Alle Adligen beginnen mit 600 Gold und acht Adligenkarten.</p></div> : <div className="waiting-host"><Loader2 className="animate-spin" /><b>Du sitzt am Hof.</b> Warte, bis {room.state.players.find(p => p.id === room.hostPlayerId)?.name ?? "der Host"} das Spiel startet.</div>}<button className="leave-link" onClick={onLeave}>Raum verlassen</button></section></main>; }
