@@ -55,6 +55,7 @@ export default function Home() {
   function submitJoin(e: FormEvent) { e.preventDefault(); join.mutate({ code: joinCode.toUpperCase(), name, token: seat?.code === joinCode.toUpperCase() ? seat.token : undefined }); }
   function copyCode() { if (!room) return; navigator.clipboard.writeText(room.code); setCopied(true); setTimeout(() => setCopied(false), 1300); }
   function playSelected() { if (!seat || !selected) return; play.mutate({ ...seat, instanceId: selected.instanceId, targetPlayerId: cardTarget || undefined, amount: cardAmount }); }
+  function leaveRoom() { persistSeat(null); setSeat(null); setActiveCard(null); toast.success("Du hast den Raum verlassen."); }
 
   if (!seat || !room) return <Landing name={name} setName={setName} joinCode={joinCode} setJoinCode={setJoinCode} onCreate={submitCreate} onJoin={submitJoin} loading={busy || roomQuery.isLoading} />;
   if (room.state.status === "lobby") return <Lobby room={room} onStart={() => start.mutate(seat)} loading={busy} onLeave={() => { persistSeat(null); setSeat(null); }} />;
@@ -63,7 +64,7 @@ export default function Home() {
   return <main className="app-shell">
     <header className="court-header">
       <a href="/" className="brand"><span className="brand-crown"><Crown size={20} /></span><span>ONE KING<br /><b>ONE CROWN</b></span></a>
-      <div className="court-meta"><span className="phase-pill">RUNDE {room.state.round} / 4</span><span className={cn("phase-pill", room.state.phase === "negotiation" && "phase-pill-gold")}>{room.state.phase === "playing" ? "SPIELPHASE" : "VERHANDLUNG"}</span><button className="room-code" onClick={copyCode}>RAUM {room.code} {copied ? <Check size={15} /> : <Copy size={15} />}</button></div>
+      <div className="court-meta"><span className="phase-pill">RUNDE {room.state.round} / 4</span><span className={cn("phase-pill", room.state.phase === "negotiation" && "phase-pill-gold")}>{room.state.phase === "playing" ? "SPIELPHASE" : "VERHANDLUNG"}</span><button className="room-code" onClick={copyCode}>RAUM {room.code} {copied ? <Check size={15} /> : <Copy size={15} />}</button><button className="leave-link in-game-leave mt-0" onClick={leaveRoom}>Raum verlassen</button></div>
     </header>
 
     <section className="game-hero"><div><p className="eyebrow">DER KÖNIGLICHE HOF</p><h1>{king ? <><Crown className="inline-crown" /> {king.name} trägt die Krone</> : "Der Hof wartet"}</h1><p>{room.state.phase === "playing" ? <><b>{current?.name ?? "—"}</b> ist am Zug · noch <b>{room.state.playsRemaining}</b> Karte(n) zu spielen</> : "Zwei Minuten verhandeln: Gold, Karten, Versprechen und Allianzen."}</p></div><div className="deck-stack"><div><span>KÖNIG</span><b>{room.state.kingDeck.length}</b></div><div><span>ADEL</span><b>{room.state.nobleDeck.length}</b></div><div><span>ABWURF</span><b>{room.state.discard.length}</b></div></div></section>
