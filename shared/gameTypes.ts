@@ -17,6 +17,7 @@ export type PlayerState = {
 };
 
 export type GameEvent = { id: string; message: string; at: number; tone?: "system" | "gold" | "crown" | "card" };
+export type StatusEffect = { id: string; type: "isolation" | "kings-eye" | "shifting-tides"; sourcePlayerId: string; targetPlayerIds: string[]; expiresAtTurn: number };
 
 export type GameState = {
   players: PlayerState[];
@@ -31,6 +32,8 @@ export type GameState = {
   maxRounds: number;
   status: GameStatus;
   events: GameEvent[];
+  statusEffects: StatusEffect[];
+  turnNumber: number;
   version: number;
 };
 

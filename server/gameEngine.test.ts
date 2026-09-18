@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CARD_BY_ID, DECK_SIZE } from "../shared/okocCards";
-import { createInitialState, joinPlayer, kickPlayer, playCard, snapshotRoom, startGame } from "./gameEngine";
+import { adjustGold, createInitialState, joinPlayer, kickPlayer, playCard, snapshotRoom, startGame } from "./gameEngine";
 
 describe("One King, One Crown game engine", () => {
   it("contains all 99 supplied print-and-play cards", () => {
@@ -67,5 +67,18 @@ describe("One King, One Crown game engine", () => {
     playCard(state, bombHolder.id, "royal-bomb-test");
     const goldAfter = state.players.filter(player => player.id !== state.kingPlayerId).map(player => player.gold);
     expect(goldAfter).toEqual(goldBefore.map(gold => Math.max(0, gold - 800)));
+  });
+
+  it("records persistent protection and blocks later gold theft", () => {
+    const { state, hostId } = createInitialState("Host");
+    const guest = joinPlayer(state, "Noble A"); joinPlayer(state, "Noble B"); joinPlayer(state, "Noble C");
+    startGame(state, hostId, hostId);
+    const actor = state.players.find(player => player.id === state.currentPlayerId)!;
+    actor.hand = [{ instanceId: "kings-eye-test", definitionId: "kings-eye" }];
+    state.playsRemaining = 1;
+    playCard(state, actor.id, "kings-eye-test", { targetPlayerId: guest.id });
+    expect(state.statusEffects.some(effect => effect.type === "kings-eye" && effect.targetPlayerIds.includes(guest.id))).toBe(true);
+    expect(state.events.some(event => event.message.includes("protected by King's Eye"))).toBe(true);
+    expect(() => adjustGold(state, hostId, guest.id, -100, "Test theft")).toThrow("protected");
   });
 });
