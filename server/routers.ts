@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { createRoom, getRoomByCode, saveRoomState } from "./db";
-import { addChat, adjustGold, advanceTurn, crownPlayer, createInitialState, findPlayerForToken, joinPlayer, playCard, rollDice, snapshotRoom, startGame, transferGold } from "./gameEngine";
+import { addChat, adjustGold, advanceTurn, crownPlayer, createInitialState, findPlayerForToken, joinPlayer, kickPlayer, playCard, rollDice, snapshotRoom, startGame, transferGold } from "./gameEngine";
 
 const nameInput = z.string().trim().min(2, "Use at least two characters.").max(24, "Use 24 characters or fewer.");
 const roomInput = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{6}$/, "Enter a six-character room code.");
@@ -65,6 +65,12 @@ export const appRouter = router({
     start: publicProcedure.input(credentials).mutation(async ({ input }) => {
       const { room, player } = await roomAndPlayer(input.code, input.token);
       startGame(room.state, player.id, room.hostPlayerId);
+      const saved = await saveRoomState(room.code, room.state);
+      return snapshotRoom(saved!, input.token);
+    }),
+    kick: publicProcedure.input(credentials.extend({ targetPlayerId: z.string() })).mutation(async ({ input }) => {
+      const { room, player } = await roomAndPlayer(input.code, input.token);
+      kickPlayer(room.state, player.id, input.targetPlayerId, room.hostPlayerId);
       const saved = await saveRoomState(room.code, room.state);
       return snapshotRoom(saved!, input.token);
     }),

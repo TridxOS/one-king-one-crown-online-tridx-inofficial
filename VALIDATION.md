@@ -9,3 +9,7 @@ The rendered table showed the active-player banner, seat order, gold ledger, dic
 No runtime console errors were reported after the application reload. The product test room uses code `WTSFEQ`; it is isolated from the app UI and not referenced by the released interface.
 
 A further live interaction test gave the original host 500 gold via the visible Gold-Tresor. Once the noble reached 1,100 gold versus the incumbent King’s 1,000, the application immediately changed the crown, swapped the two players’ seats, and swapped the browser’s private hand from noble cards to king cards. The activity chronicle recorded both the bank change and automatic transfer. This confirms the central power-transfer rule is implemented end-to-end.
+
+## Host moderation and contrast update
+
+The host lobby was opened in the browser with three temporary guests. The host-only **Entfernen** control rendered on each guest seat and did not render on the host's own seat. The page showed the removal action next to Adele, Bram, and Cora and retained a usable start control. Server tests verify that a guest cannot invoke the kick engine, the host can remove a guest, and remaining seats are compacted. Numeric contrast was improved for player gold totals, table gold totals, deck counters, and gold/transfer form controls; the kick action uses a clear red-tinted accessible button.

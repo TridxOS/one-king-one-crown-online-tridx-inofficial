@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CARD_BY_ID, DECK_SIZE } from "../shared/okocCards";
-import { createInitialState, joinPlayer, playCard, snapshotRoom, startGame } from "./gameEngine";
+import { createInitialState, joinPlayer, kickPlayer, playCard, snapshotRoom, startGame } from "./gameEngine";
 
 describe("One King, One Crown game engine", () => {
   it("contains all 99 supplied print-and-play cards", () => {
@@ -19,6 +19,15 @@ describe("One King, One Crown game engine", () => {
     expect(king.hand).toHaveLength(8);
     expect(state.players.filter(player => player.id !== king.id).every(player => player.gold === 600 && player.hand.length === 8)).toBe(true);
     expect(state.playsRemaining).toBe(3);
+  });
+
+  it("lets only the host remove a guest from the lobby", () => {
+    const { state, hostId } = createInitialState("Host");
+    const guest = joinPlayer(state, "Noble A"); joinPlayer(state, "Noble B");
+    expect(() => kickPlayer(state, guest.id, state.players[2]!.id, hostId)).toThrow("Only the host");
+    kickPlayer(state, hostId, guest.id, hostId);
+    expect(state.players.map(player => player.name)).toEqual(["Host", "Noble B"]);
+    expect(state.players[1]!.seat).toBe(2);
   });
 
   it("keeps every private hand hidden in other player snapshots", () => {

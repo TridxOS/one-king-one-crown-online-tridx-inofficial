@@ -30,6 +30,16 @@ export function joinPlayer(state: GameState, name: string) {
   state.players.push(newPlayer); event(state, `${newPlayer.name} takes a seat at court.`); return newPlayer;
 }
 export function findPlayerForToken(state: GameState, token: string) { return state.players.find(candidate => candidate.token === token); }
+export function kickPlayer(state: GameState, actorId: string, targetId: string, hostPlayerId: string) {
+  if (state.status !== "lobby") throw new Error("Players can only be removed before the game begins.");
+  if (actorId !== hostPlayerId) throw new Error("Only the host may remove a player.");
+  if (targetId === hostPlayerId) throw new Error("The host cannot remove themselves.");
+  const targetIndex = state.players.findIndex(noble => noble.id === targetId);
+  if (targetIndex < 0) throw new Error("This player is no longer in the room.");
+  const [removed] = state.players.splice(targetIndex, 1);
+  state.players.forEach((noble, index) => { noble.seat = index + 1; });
+  event(state, `${removed!.name} was removed from the court by the host.`, "system");
+}
 
 export function startGame(state: GameState, actorId: string, hostPlayerId: string) {
   if (actorId !== hostPlayerId) throw new Error("Only the host may begin the game.");
