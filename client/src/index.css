@@ -68,3 +68,34 @@ a { color: inherit; }
 .in-game-leave { margin-top: 0; color: #f0dfb0; white-space: nowrap; }
 .in-game-leave:hover { color: #fff4bd; }
 @media (max-width: 720px) { .court-meta { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }.in-game-leave { font-size: 9px; padding: 5px 2px; } }
+
+.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 9px; border: 1px solid rgba(244,236,216,.3); border-radius: 999px; color: #f4ead5; background: rgba(0,0,0,.16); font: 700 9px var(--font-mono); letter-spacing: .04em; }
+.theme-toggle:hover { color: #182018; background: #f5d674; border-color: #f5d674; }
+.lobby-header-actions { display: flex; align-items: center; gap: 10px; }
+.mid-game-kick { margin: 0 0 0 5px; padding: 3px 6px; font-size: 8px; }
+.noble-row { grid-template-columns: 29px minmax(0,1fr) auto auto; }
+html:not(.dark) body { background: #f3eee2; color: #1d241f; }
+html:not(.dark) .landing { background: radial-gradient(circle at 75% 22%, #d9c99e 0, #f3eee2 38%, #e7dfce 100%); color: #182018; }
+html:not(.dark) .landing nav { border-color: rgba(24,32,24,.16); }
+html:not(.dark) .landing .brand { color: #182018; }
+html:not(.dark) .landing .nav-license, html:not(.dark) .landing .hero-lede, html:not(.dark) .landing .how-strip p { color: #4e5c50; }
+html:not(.dark) .landing footer { color: #5d655c; }
+html:not(.dark) .landing footer a { color: #7b5b12; }
+html:not(.dark) .lobby { background: radial-gradient(circle at 50% 22%, #d8c999, #f3eee2 65%, #e7dfce); color: #1d241f; }
+html:not(.dark) .lobby .brand { color: #182018; }
+html:not(.dark) .lobby .lobby-lede, html:not(.dark) .lobby .invite-tip, html:not(.dark) .lobby-actions p { color: #536154; }
+html:not(.dark) .lobby .seat-card { background: rgba(24,32,24,.06); border-color: rgba(24,32,24,.24); color: #536154; }
+html:not(.dark) .lobby .seat-card.seat-filled { background: #fffaf0; color: #182018; }
+html:not(.dark) .lobby .theme-toggle { color: #334638; background: rgba(255,255,255,.35); border-color: #718070; }
+html:not(.dark) .app-shell { background: #f3eee2; }
+html:not(.dark) .app-shell .court-header { background: #e6ddca; }
+html:not(.dark) .app-shell .brand { color: #182018; }
+@media (max-width: 720px) { .noble-row { grid-template-columns: 29px minmax(0,1fr) auto; }.mid-game-kick { grid-column: 2 / -1; justify-self: start; margin: -2px 0 3px 0; } .court-meta .theme-toggle { display: none; } .landing nav .theme-toggle { min-width: 31px; padding: 0 8px; font-size: 0; } }
+
+html:not(.dark) .landing .hero-copy h1 { color: #1a241d; text-shadow: none; }
+html:not(.dark) .landing .hero-copy .eyebrow { color: #7b5b12; }
+html:not(.dark) .landing .feature-row { color: #425447; }
+html:not(.dark) .landing .feature-row svg { color: #8a6714; }
+html:not(.dark) .landing .how-strip { border-color: rgba(24,32,24,.16); }
+html:not(.dark) .landing .how-strip div { border-color: rgba(24,32,24,.16); }
+html:not(.dark) .landing .how-strip span { color: #8a6714; }

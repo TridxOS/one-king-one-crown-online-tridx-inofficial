@@ -26,21 +26,28 @@ export function createInitialState(hostName: string) {
 }
 
 export function joinPlayer(state: GameState, name: string) {
-  if (state.status !== "lobby") throw new Error("This game has already begun.");
+  if (state.status !== "lobby" && state.status !== "playing") throw new Error("This game has already finished.");
   if (state.players.length >= MAX_PLAYERS) throw new Error("This court already has eight nobles.");
   const newPlayer: PlayerState = { id: nanoid(12), token: nanoid(28), name: name.trim().slice(0, 24), seat: state.players.length + 1, gold: 600, hand: [], table: [], joinedAt: Date.now() };
-  state.players.push(newPlayer); event(state, `${newPlayer.name} takes a seat at court.`); return newPlayer;
+  state.players.push(newPlayer);
+  if (state.status === "playing") drawToEight(state, newPlayer);
+  event(state, `${newPlayer.name} joins the court${state.status === "playing" ? " during the current game and receives a fresh noble hand" : ""}.`); return newPlayer;
 }
 export function findPlayerForToken(state: GameState, token: string) { return state.players.find(candidate => candidate.token === token); }
 export function kickPlayer(state: GameState, actorId: string, targetId: string, hostPlayerId: string) {
-  if (state.status !== "lobby") throw new Error("Players can only be removed before the game begins.");
+  if (state.status === "finished") throw new Error("This game has already finished.");
   if (actorId !== hostPlayerId) throw new Error("Only the host may remove a player.");
   if (targetId === hostPlayerId) throw new Error("The host cannot remove themselves.");
   const targetIndex = state.players.findIndex(noble => noble.id === targetId);
   if (targetIndex < 0) throw new Error("This player is no longer in the room.");
   const [removed] = state.players.splice(targetIndex, 1);
   state.players.forEach((noble, index) => { noble.seat = index + 1; });
-  event(state, `${removed!.name} was removed from the court by the host.`, "system");
+  if (state.currentPlayerId === removed!.id) state.currentPlayerId = state.players.length ? state.players[0]!.id : null;
+  if (state.kingPlayerId === removed!.id) {
+    const successor = state.players.reduce((best, noble) => !best || noble.gold > best.gold ? noble : best, undefined as PlayerState | undefined);
+    state.kingPlayerId = successor?.id ?? null;
+    if (successor) event(state, `${removed!.name} was removed by the host. ${successor.name} inherits the crown.`, "crown");
+  } else event(state, `${removed!.name} was removed from the court by the host.`, "system");
 }
 
 export function startGame(state: GameState, actorId: string, hostPlayerId: string) {

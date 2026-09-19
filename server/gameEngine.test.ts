@@ -30,6 +30,17 @@ describe("One King, One Crown game engine", () => {
     expect(state.players[1]!.seat).toBe(2);
   });
 
+  it("allows a fresh noble to join an active round and lets the host remove them", () => {
+    const { state, hostId } = createInitialState("Host");
+    joinPlayer(state, "Noble A"); joinPlayer(state, "Noble B"); joinPlayer(state, "Noble C");
+    startGame(state, hostId, hostId);
+    const returning = joinPlayer(state, "Returning Noble");
+    expect(returning.hand).toHaveLength(8);
+    expect(state.events[0]?.message).toContain("current game");
+    kickPlayer(state, hostId, returning.id, hostId);
+    expect(state.players.some(player => player.id === returning.id)).toBe(false);
+  });
+
   it("keeps every private hand hidden in other player snapshots", () => {
     const { state, hostId, hostToken } = createInitialState("Host");
     const guest = joinPlayer(state, "Noble A"); joinPlayer(state, "Noble B"); joinPlayer(state, "Noble C");

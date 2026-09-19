@@ -13,3 +13,7 @@ A further live interaction test gave the original host 500 gold via the visible 
 ## Host moderation and contrast update
 
 The host lobby was opened in the browser with three temporary guests. The host-only **Entfernen** control rendered on each guest seat and did not render on the host's own seat. The page showed the removal action next to Adele, Bram, and Cora and retained a usable start control. Server tests verify that a guest cannot invoke the kick engine, the host can remove a guest, and remaining seats are compacted. Numeric contrast was improved for player gold totals, table gold totals, deck counters, and gold/transfer form controls; the kick action uses a clear red-tinted accessible button.
+
+## Dark mode, rejoin, and mid-game moderation
+
+The landing page now exposes a persistent theme toggle. Browser verification confirmed the toggle changes from **Hell** to **Dunkel**, updates the root theme, and applies the light-mode palette; light-mode hero contrast was corrected after visual inspection. The active-room engine tests cover joining an already-playing room with a fresh eight-card noble hand and host removal from that active state. The same `game.join` procedure is used for normal and active-room rejoin, while the local seat token continues to restore an existing player automatically.
